@@ -1,14 +1,15 @@
 import express from 'express'
-import {search, index} from './controllers.mjs'
+import {search, index, conformance} from './controllers.mjs'
 
 
 var router = express.Router()
 
-router.get('/', function(req,res) { res.send("STAC SEARCH API")})
+router.get('/', (req,res) => { res.send("STAC SEARCH API")})
 
 router.get('/search', search)
 router.post('/search', search)
-
+router.get('/conformance', conformance)
 router.post('/index', index)
+router.get('/api', (req,res) => {res.send({openapi: true})})
 
 export default router

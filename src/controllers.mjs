@@ -1,6 +1,19 @@
 
 import { elasticClient } from "./elastic.mjs"
 import axios from 'axios'
+import retry from 'axios-retry'
+
+const {
+    isNetworkOrIdempotentRequestError
+} = retry
+
+function handleRetry (error) {
+    console.error('--- AXIOS ERROR --- ', error)
+
+    return isNetworkOrIdempotentRequestError(error)
+}
+
+retry(axios, { retries: 3, retryCondition: handleRetry, retryDelay: () => { return 2000 } })
 
 const indexAlias = `${process.env.ELASTIC_INDEX_PREFIX}-stac`
 
@@ -64,7 +77,7 @@ async function search(req,res) {
     limit = limit | 100
 
     query = {
-        index: 'undefined-stac-1680060757963',
+        index: indexAlias,
         "from" : 0, "size" : limit,
         body: {
             "query": {
@@ -150,6 +163,8 @@ async function index(req,res) {
 
     let catalog_result = await axios.get(catalog)
 
+    res.send({OK:true})
+
     const indexName = `${indexAlias}-${Date.now()}`
 
     console.log(`stac creating index... ${indexName}`)
@@ -166,26 +181,51 @@ async function index(req,res) {
         }
     })
 
-    catalog_result.data.links.map(async l => {
-        if(l.rel = "child") {
+    await Promise.all(catalog_result.data.links.map(async l => {
+        if(l.rel == "child") {
             let child_result = await axios.get(l.href)
+            console.log(`indexing: ${child_result.data.id}`)
 
-            child_result.data.links.map(async i => {
+            await Promise.all(child_result.data.links.map(async i => {
                 if(i.rel == "item") {
                     let item_result = await axios.get(i.href)
-
-                    //this is the thing to add to the index
-                    console.log(`indexing: ${item_result.data.id}`)
                     let index_response = await elasticClient.index({
                         index: indexName,
                         body: item_result.data
                     })
                 }
-            })
+            }))
         }
-    })
+    }))
 
-    res.send({OK:true})
+    await rotateIndex(indexName, indexAlias)
 }
 
-export {search, index}
+async function rotateIndex(indexName, alias) {
+    console.log(`Rotating Index ${alias} to ${indexName}`)
+    await elasticClient.indices.putAlias({index: indexName, name: alias})
+
+    const indexPrefix = alias+'*'
+    const indexes = await elasticClient.cat.indices({ format: 'json', index: indexPrefix })
+
+    for(let index of indexes.body) {
+        if(index.index != indexName) {
+            console.log(`Removing alias from ${index.index}`)
+            try {
+                await elasticClient.indices.deleteAlias({index: index.index, name: alias})
+            } catch (error) {
+            }
+        }
+    }
+}
+
+function conformance(req,res) {
+    res.send({
+        "conformsTo" : [
+            "https://api.stacspec.org/v1.0.0-rc.3/core",
+            "https://api.stacspec.org/v1.0.0-rc.3/item-search"
+        ],
+    })
+}
+
+export {search, index, conformance}
