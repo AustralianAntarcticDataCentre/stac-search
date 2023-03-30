@@ -158,6 +158,11 @@ async function search(req,res) {
 }
 
 async function index(req,res) {
+
+    if(!req.auth.roles.contains[process.env.JWT_AUTH_ROLE]) {
+        res.status(401).send("Unauthorised")
+    }
+
     let catalog = req.body.catalog
     console.log(`--- INDEXING STAC CATALOG - ${catalog} ---`)
 

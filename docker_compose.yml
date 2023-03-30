@@ -1,0 +1,7 @@
+version: '3.7'
+services:
+    api:
+        image: stac-search
+        container_name: stac-search
+        build: .
+

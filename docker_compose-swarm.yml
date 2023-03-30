@@ -1,0 +1,40 @@
+version: "3.7"
+
+services: 
+  api:
+    image: ${CONTAINER_IMAGE_API}
+    networks:
+      - aadc-traefik-net
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=aadc-traefik-net
+        - "traefik.default.protocol=http"
+        - "traefik.http.routers.${APP_NAME_DEPLOYMENT}_api.rule=Host(`${APP_HOST}`) && PathPrefix(`/${APP_PROXY_PATH}`)"
+        - "traefik.http.services.${APP_NAME_DEPLOYMENT}_api.loadbalancer.server.port=${API_PORT}"
+        # Middleware is required to correctly route to the API without the PathPrefix being passed to the API service,
+        # otherwise all requests will send /${APP_PROXY_PATH}/api/{{REQUEST}} and the API wont know how to serve the request due
+        # to the extra path.
+        - "traefik.http.middlewares.stripprefix_${APP_NAME_DEPLOYMENT}_api.stripprefix.prefixes=/${APP_PROXY_PATH}"
+        - "traefik.http.middlewares.stripprefix_${APP_NAME_DEPLOYMENT}_api.stripprefix.forceslash=false"
+        - "traefik.http.routers.${APP_NAME_DEPLOYMENT}_api.middlewares=stripprefix_${APP_NAME_DEPLOYMENT}_api@docker"
+    logging:
+      driver: loki
+      options:
+        loki-url: ${LOKI_URL}
+        loki-external-labels: "container_name=${APP_NAME_DEPLOYMENT},environment=prod,containerID={{.ID}}"
+
+networks:
+  aadc-traefik-net:
+    external: true
+  backend:
+
+
