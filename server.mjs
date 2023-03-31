@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 dotenv.config()
 import express from 'express'
+import cors from 'cors'
 import router from './src/routes.mjs'
 import { elasticHealth } from './src/elastic.mjs'
 
@@ -9,7 +10,11 @@ async function run() {
     const app = express()
     app.use(express.json())
     app.use('/', router)
-  
+
+    app.use(cors({
+        origin: '*'
+    }));
+      
     const port = process.env.API_PORT || 4000
 
     const esHealth = await elasticHealth()
