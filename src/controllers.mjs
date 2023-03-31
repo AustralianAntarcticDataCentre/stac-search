@@ -20,6 +20,8 @@ const indexAlias = `${process.env.ELASTIC_INDEX_PREFIX}-stac`
 function parseDatetime(datetime) {
     let [from, to] = datetime.split('/')
 
+    console.log(`${from} ${to}`)
+
     let from_date, to_date
     if(from && from != '..') {
         from_date = from
@@ -99,7 +101,7 @@ async function search(req,res) {
     if(datetime) {
         let filter_date = parseDatetime(datetime)
         if(filter_date) {
-            range["properties.datetime"] = filter_date
+            filter.push({range: {"properties.datetime" : filter_date }})
         }
     }
 
