@@ -56,9 +56,14 @@ async function search(req,res) {
 
     if(req.method == 'GET') {
         query = req.query
+        query.limit = parseInt(query.limit)
         query.collections = query.collections ? query.collections.split(',') : null
         query.ids = query.ids? query.ids.split(',') : null
-        query.bbox = query.bbox? query.bbox.split(',') : null
+        if(query.bbox) {
+            query.bbox = query.bbox.split(',').map(i => {
+                return parseFloat(i)
+            })
+        }
     }
 
     if(req.method == 'POST') {
@@ -74,7 +79,7 @@ async function search(req,res) {
         collections
     } = query
 
-    limit = limit | 100
+    limit = limit || 100
 
     query = {
         index: indexAlias,
