@@ -43,7 +43,7 @@ function parseGeometry(bbox, intersects) {
     } else if(bbox) {
         filter_shape = {
             "type": "envelope",
-            "coordinates": [ [ bbox[0], bbox[1] ], [ bbox[2], bbox[3] ] ]
+            "coordinates": [ [ bbox[0], bbox[3] ], [ bbox[2], bbox[1] ] ]
         }
     }
 
