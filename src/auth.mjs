@@ -1,4 +1,4 @@
-import * as jwt from 'express-jwt'
+import { expressjwt } from "express-jwt";
 const jwt_secret = process.env.JWT_SECRET
 
 function findToken (req) {
@@ -12,15 +12,17 @@ function findToken (req) {
 
     return null
 }
-  
-const authenticate = () => jwt.expressjwt({
+
+const authenticate = expressjwt({
     secret: jwt_secret,
     credentialsRequired: true,
     getToken: findToken,
     algorithms: ["HS256"]
 })
-  
-export {
+
+export default {
     findToken,
     authenticate
 }
+
+  

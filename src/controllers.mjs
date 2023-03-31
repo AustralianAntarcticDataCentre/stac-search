@@ -159,7 +159,9 @@ async function search(req,res) {
 
 async function index(req,res) {
 
-    if(!req.auth.roles.contains[process.env.JWT_AUTH_ROLE]) {
+    console.log(req.auth)
+
+    if(!req.auth.roles.includes(process.env.JWT_AUTH_ROLE)) {
         res.status(401).send("Unauthorised")
     }
 
