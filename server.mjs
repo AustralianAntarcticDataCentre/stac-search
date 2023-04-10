@@ -13,7 +13,7 @@ async function run() {
 
     app.use(cors({
         origin: '*'
-    }));
+    }))
       
     const port = process.env.API_PORT || 4000
 

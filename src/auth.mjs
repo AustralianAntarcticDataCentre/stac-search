@@ -6,8 +6,6 @@ function findToken (req) {
     return req.headers['x-access-token']
     } else if (req.query && req.query.token) {
     return req.query.token
-    } else if (req.cookies && req.cookies.aadc_token) {
-    return req.cookies.aadc_token
     }
 
     return null

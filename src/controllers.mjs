@@ -166,10 +166,10 @@ async function search(req,res) {
 
 async function index(req,res) {
 
-    console.log(req.auth)
-
-    if(!req.auth.roles.includes(process.env.JWT_AUTH_ROLE)) {
-        res.status(401).send("Unauthorised")
+    if(process.env.JWT_SECRET) {
+        if(!req.auth.roles.includes(process.env.JWT_AUTH_ROLE)) {
+            res.status(401).send("Unauthorised")
+        }
     }
 
     let catalog = req.body.catalog
