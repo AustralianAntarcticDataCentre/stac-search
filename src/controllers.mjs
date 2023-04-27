@@ -200,7 +200,7 @@ async function index(req,res) {
             let child_result = await axios.get(l.href)
             console.log(`indexing: ${child_result.data.id}`)
 
-            await Promise.all(child_result.data.links.map(async i => {
+            await Promise.all(child_result.data.links?.map(async i => {
                 if(i.rel == "item") {
                     let item_result = await axios.get(i.href)
                     let index_response = await elasticClient.index({
