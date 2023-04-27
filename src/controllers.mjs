@@ -8,8 +8,6 @@ const {
 } = retry
 
 function handleRetry (error) {
-    console.error('--- AXIOS ERROR --- ', error)
-
     return isNetworkOrIdempotentRequestError(error)
 }
 
@@ -205,7 +203,7 @@ async function index(req,res) {
                 return
             }
 
-            await Promise.all(child_result.data.links?.map(async i => {
+            for( let i of child_result.data.links) {
                 if(i.rel == "item") {
                     let item_result = await axios.get(i.href)
                     let index_response = await elasticClient.index({
@@ -213,7 +211,7 @@ async function index(req,res) {
                         body: item_result.data
                     })
                 }
-            }))
+            }
         }
     }))
 
