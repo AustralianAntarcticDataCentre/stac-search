@@ -76,7 +76,8 @@ async function search(req,res) {
         datetime,
         intersects,
         ids,
-        collections
+        collections,
+        filter
     } = query
 
     limit = limit || 100
@@ -87,26 +88,96 @@ async function search(req,res) {
         body: {
             "query": {
                 "bool" :{
-                    "must": []
+                    "must": [],
+                    "must_not": []
                 }
             }
         }
     }
 
-    let range = {}
-    let filter = []
+    let esFilter = []
+    let esMatch = []
+    let esNot = []
+
+    if(filter) {
+        filter.args.map(arg => {
+            if(arg.op == '=') {
+                let a = {match: {}}
+                a.match[`properties.${arg.args[0].property}`] = arg.args[1]
+                esMatch.push(a)
+            }
+
+            if(arg.op == '<>') {
+                let a = {match: {}}
+                a.match[`properties.${arg.args[0].property}`] = arg.args[1]
+                esNot.push(a)
+            }
+
+            if(arg.op == '<') {
+                let a = {range: {}}
+                a.range[`properties.${arg.args[0].property}`] = {lt: arg.args[1]}
+                esFilter.push(a)
+            } 
+
+            if(arg.op == '<=') {
+                let a = {range: {}}
+                a.range[`properties.${arg.args[0].property}`] = {lte: arg.args[1]}
+                esFilter.push(a)
+            }
+
+            if(arg.op == '>') {
+                let a = {range: {}}
+                a.range[`properties.${arg.args[0].property}`] = {gt: arg.args[1]}
+                esFilter.push(a)
+            }
+
+            if(arg.op == '>=') {
+                let a = {range: {}}
+                a.range[`properties.${arg.args[0].property}`] = {gte: arg.args[1]}
+                esFilter.push(a)
+            }
+
+            if(arg.op == 's_intersects') {
+                let a = {
+                    "geo_shape": {
+                    }
+                }
+
+                a.geo_shape[`${arg.args[0].property}`] = {
+                    "shape": arg.args[1],
+                    "relation": "intersects"
+                }
+
+                esFilter.esFilter.push(a)
+            }
+
+            if(arg.op == 's_within') {
+                let a = {
+                    "geo_shape": {
+                    }
+                }
+
+                a.geo_shape[`${arg.args[0].property}`] = {
+                    "shape": arg.args[1],
+                    "relation": "within"
+                }
+
+                esFilter.esFilter.push(a)
+            }
+        })
+    }
 
     if(datetime) {
         let filter_date = parseDatetime(datetime)
         if(filter_date) {
-            filter.push({range: {"properties.datetime" : filter_date }})
+            esFilter.push({range: {"properties.datetime" : filter_date }})
         }
     }
 
     if(bbox || intersects) {
     let filter_shape = parseGeometry(bbox, intersects)
         if(filter_shape) {
-            filter.push({
+            esFilter.push({
                 "geo_shape": {
                     "geometry": {
                         "shape": filter_shape
@@ -117,18 +188,19 @@ async function search(req,res) {
     }
 
     if(collections) {
-        filter.push({terms: {'collection': collections }})
+        esFilter.push({terms: {'collection': collections }})
     }
 
     if(ids) {
-        filter.push({terms: {'id': ids }})
+        esFilter.push({terms: {'id': ids }})
     }
 
-    console.log('filter', filter)
+    console.log('filter', esFilter)
+    console.log('must', esMatch)
 
-    query.body.query.bool.filter = filter
-
-    console.log('query: ', query.body.query)
+    query.body.query.bool.must = esMatch
+    query.body.query.bool.filter = esFilter
+    query.body.query.bool.must_not = esNot
 
     const result = await elasticClient.search(query)
 
@@ -185,7 +257,7 @@ async function index(req,res) {
     await elasticClient.indices.putMapping({
         index: indexName,
         body: {
-            properties: {            
+            properties: {    
                 id: {type: 'keyword'},
                 collection: {type: 'keyword'},
                 geometry: {type: 'geo_shape'},
@@ -196,7 +268,6 @@ async function index(req,res) {
     await Promise.all(catalog_result.data.links.map(async l => {
         if(l.rel == "child") {
             let child_result = await axios.get(l.href)
-            console.log(`indexing: ${child_result.data.id}`)
 
             if(!child_result.data.links) {
                 console.log('empty collection')
@@ -212,6 +283,8 @@ async function index(req,res) {
                     })
                 }
             }
+
+            console.log(`indexed: ${child_result.data.id}`)
         }
     }))
 
