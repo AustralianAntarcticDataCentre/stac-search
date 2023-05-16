@@ -2,6 +2,11 @@
 import { elasticClient } from "./elastic.mjs"
 import axios from 'axios'
 import retry from 'axios-retry'
+import SqlWhereParser from 'sql-where-parser'
+
+let config = SqlWhereParser.defaultConfig
+config.tokenizer.shouldTokenize.splice(config.tokenizer.shouldTokenize.indexOf('-'), 1)
+let parser = new SqlWhereParser(config)
 
 const {
     isNetworkOrIdempotentRequestError
@@ -50,6 +55,55 @@ function parseGeometry(bbox, intersects) {
     return filter_shape
 }
 
+function parseTextFilter(filter) {
+    const parsed = parser.parse(filter, (operatorValue, operands) => {
+        switch (operatorValue) {
+            case '=':
+                return {
+                    "op": "=",
+                    args: [{"property": operands[0]}, operands[1]]
+                }
+            case '<=':
+                return {
+                    "op": "<=",
+                    args: [{"property": operands[0]}, operands[1]]
+                }
+            case '>=':
+                return {
+                    "op": "<=",
+                    args: [{"property": operands[0]}, operands[1]]
+                }
+            case '<':
+                return {
+                    "op": "<",
+                    args: [{"property": operands[0]}, operands[1]]
+                }
+            case '>':
+                return {
+                    "op": "<",
+                    args: [{"property": operands[0]}, operands[1]]
+                }
+            case '<>':
+                return {
+                    "op": "<>",
+                    args: [{"property": operands[0]}, operands[1]]
+                }
+            case 'like':
+                return {
+                    "op": "like",
+                    args: [{"property": operands[0]}, operands[1]]
+                }
+            case 'AND':
+                return {
+                    'op': "and",
+                    args: operands
+                }
+        }
+    })
+
+    return parsed
+}
+
 
 async function search(req,res) {
     let query
@@ -77,7 +131,8 @@ async function search(req,res) {
         intersects,
         ids,
         collections,
-        filter
+        filter,
+        filter_lang
     } = query
 
     limit = limit || 100
@@ -99,11 +154,34 @@ async function search(req,res) {
     let esMatch = []
     let esNot = []
 
-    if(filter) {
-        filter.args.map(arg => {
+    console.log(filter_lang)
+    console.log(filter)
+
+    if(filter && filter_lang == 'cql2-text') {
+        filter = parseTextFilter(filter)
+        filter_lang = 'cql2-json'
+    }
+
+    if(filter && filter_lang == 'cql2-json') {
+
+        let args = []
+
+        if(filter.op == 'and' || filter.op == 'or') {
+            args = filter.args
+        } else {
+            args.push(filter)
+        }
+
+        args.map(arg => {
             if(arg.op == '=') {
                 let a = {match: {}}
                 a.match[`properties.${arg.args[0].property}`] = arg.args[1]
+                esMatch.push(a)
+            }
+
+            if(arg.op == 'like') {
+                let a = {match: {}}
+                a.match[`properties.${arg.args[0].property}`] = arg.args[1].replace('%', '')
                 esMatch.push(a)
             }
 
@@ -313,7 +391,12 @@ function conformance(req,res) {
     res.send({
         "conformsTo" : [
             "https://api.stacspec.org/v1.0.0-rc.3/core",
-            "https://api.stacspec.org/v1.0.0-rc.3/item-search"
+            "https://api.stacspec.org/v1.0.0-rc.3/item-search",
+            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-text",
+            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-json",
+            "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/basic-cql2",
+            "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/filter",
+            "https://api.stacspec.org/v1.0.0-beta.5/item-search#filter:item-search-filter"
         ],
     })
 }
