@@ -70,7 +70,7 @@ function parseTextFilter(filter) {
                 }
             case '>=':
                 return {
-                    "op": "<=",
+                    "op": ">=",
                     args: [{"property": operands[0]}, operands[1]]
                 }
             case '<':
@@ -80,7 +80,7 @@ function parseTextFilter(filter) {
                 }
             case '>':
                 return {
-                    "op": "<",
+                    "op": ">",
                     args: [{"property": operands[0]}, operands[1]]
                 }
             case '<>':
@@ -104,6 +104,29 @@ function parseTextFilter(filter) {
     return parsed
 }
 
+function parseSort(sortby) {
+    console.log(sortby)
+    let output = []
+    let sorts = sortby.split(',')
+
+    for(let s of sorts) {
+        let direction = 'asc'
+        let property = s
+
+        if(s.startsWith('-')) {
+            direction = 'desc'
+            property = s.slice(1);
+        }
+
+        if(s.startsWith('+')) {
+            direction = 'asc'
+            property = s.slice(1);
+        }
+
+        output.push({property, direction})
+    }
+}
+
 
 async function search(req,res) {
     let query
@@ -118,11 +141,17 @@ async function search(req,res) {
                 return parseFloat(i)
             })
         }
+
+        if(query.sortby) {
+            query.sortby = parseSort(query.sortby)
+        }
     }
 
     if(req.method == 'POST') {
         query = req.body
     } 
+
+    query.filter_lang = query['filter-lang']
 
     let { 
         limit,
@@ -132,7 +161,8 @@ async function search(req,res) {
         ids,
         collections,
         filter,
-        filter_lang
+        filter_lang,
+        sortby
     } = query
 
     limit = limit || 100
@@ -153,9 +183,11 @@ async function search(req,res) {
     let esFilter = []
     let esMatch = []
     let esNot = []
+    let esSort = []
 
     console.log(filter_lang)
     console.log(filter)
+    console.log(sortby)
 
     if(filter && filter_lang == 'cql2-text') {
         filter = parseTextFilter(filter)
@@ -163,6 +195,8 @@ async function search(req,res) {
     }
 
     if(filter && filter_lang == 'cql2-json') {
+
+        console.log(filter)
 
         let args = []
 
@@ -173,45 +207,52 @@ async function search(req,res) {
         }
 
         args.map(arg => {
+
+            let property = arg.args[0].property
+
+            if(property != 'collection' && property != 'id') {
+                property = `properties.${property}`
+            }
+
             if(arg.op == '=') {
                 let a = {match: {}}
-                a.match[`properties.${arg.args[0].property}`] = arg.args[1]
+                a.match[property] = arg.args[1]
                 esMatch.push(a)
             }
 
             if(arg.op == 'like') {
                 let a = {match: {}}
-                a.match[`properties.${arg.args[0].property}`] = arg.args[1].replace('%', '')
+                a.match[property] = arg.args[1].replace('%', '')
                 esMatch.push(a)
             }
 
             if(arg.op == '<>') {
                 let a = {match: {}}
-                a.match[`properties.${arg.args[0].property}`] = arg.args[1]
+                a.match[property] = arg.args[1]
                 esNot.push(a)
             }
 
             if(arg.op == '<') {
                 let a = {range: {}}
-                a.range[`properties.${arg.args[0].property}`] = {lt: arg.args[1]}
+                a.range[property] = {lt: arg.args[1]}
                 esFilter.push(a)
             } 
 
             if(arg.op == '<=') {
                 let a = {range: {}}
-                a.range[`properties.${arg.args[0].property}`] = {lte: arg.args[1]}
+                a.range[property] = {lte: arg.args[1]}
                 esFilter.push(a)
             }
 
             if(arg.op == '>') {
                 let a = {range: {}}
-                a.range[`properties.${arg.args[0].property}`] = {gt: arg.args[1]}
+                a.range[property] = {gt: arg.args[1]}
                 esFilter.push(a)
             }
 
             if(arg.op == '>=') {
                 let a = {range: {}}
-                a.range[`properties.${arg.args[0].property}`] = {gte: arg.args[1]}
+                a.range[property] = {gte: arg.args[1]}
                 esFilter.push(a)
             }
 
@@ -273,9 +314,19 @@ async function search(req,res) {
         esFilter.push({terms: {'id': ids }})
     }
 
+    if(sortby) {
+        for (let i of sortby) {
+            let sort = {}
+            sort[i.field] = i.direction
+            esSort.push(sort)
+        }
+    }
+
     console.log('filter', esFilter)
     console.log('must', esMatch)
+    console.log('sort', esSort)
 
+    query.body.sort = esSort
     query.body.query.bool.must = esMatch
     query.body.query.bool.filter = esFilter
     query.body.query.bool.must_not = esNot
